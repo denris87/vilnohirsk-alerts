@@ -1,40 +1,36 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Smart Вільногірськ</title>
+communal:
+  - show: true
+    title: "⚡ Планове відключення світла"
+    text: |
+      **02 квітня з 08:00 до 17:30 за адресами:**
+      📍 вул. Центральна: 18, 20, 20А, 22, 22А, 24, 24А;
+      📍 вул. Садова: 15, 17, 17А, 19, 19А, 30, 32, 34;
+      📍 вул. Захисників України: 20, 22;
+      📍 вул. Юрія Устенка: 23-29 (непарні);
+      
+      🏘 с. КРИНИЧКИ:
+      📍 вул. Криничанська: 1.
+      
+  - show: true
+    title: "тест1.1"
+    text: |
+      тест1.2
 
-<style>
-:root {
-  --highlight-color: #ffcc00; 
-  --glass-bg: rgba(0, 0, 0, 0.45);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-light: rgba(255, 255, 255, 0.15);
-  --glass-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
-  
-  --time-green: #00ff9c;
-  --time-passed: rgba(255, 255, 255, 0.4);
-}
-
-html, body { 
-  margin: 0; 
-  padding: 0; 
-  height: 100%; 
-}
-
-* { 
-  -webkit-user-select: none; 
-  user-select: none; 
-  box-sizing: border-box; 
-  -webkit-tap-highlight-color: transparent; 
-}
-
-body {
-  color: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  display: flex;
-  justify-content: center;
+news:
+  - show: true
+    title: "📢 ЦЕК інформує"
+    text: |
+      **З 1 квітня по 31 жовтня включно**
+      Центральна енергетична компанія переходить на літній графік роботи:
+      📍 понеділок - четвер: з 07:30 до 18:00;
+      📍 обідня перерва: з 12:00 до 12:30;
+      п'ятниця: неприймальний день;
+      субота - неділя: вихідні.
+      
+  - show: true
+    title: "тест2.2"
+    text: |
+      тест 3.3  justify-content: center;
   align-items: flex-start;
   min-height: 100vh;
   background: linear-gradient(-45deg, #1e3c72, #2a5298, #009ffd, #2af598, #009ffd);
