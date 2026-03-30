@@ -10,6 +10,11 @@ communal:
       
       🏘 с. КРИНИЧКИ:
       📍 вул. Криничанська: 1.
+      
+  - show: true
+    title: "тест1.1"
+    text: |
+      тест1.2
 
 news:
   - show: true
