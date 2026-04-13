@@ -34,11 +34,6 @@ communal:
 
 news:
   - show: true
-    title: "📢 ТЕСТ1.1"
-    text: |
-      ТЕСТ1.1
-    
-  - show: true
     title: "📢 ЦЕК інформує:"
     text: |
       **З 1 квітня по 31 жовтня включно**
