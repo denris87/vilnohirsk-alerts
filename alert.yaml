@@ -34,6 +34,11 @@ communal:
 
 news:
   - show: true
+    title: "📢 тест4"
+    text: |
+      тест4
+      
+  - show: true
     title: "📢 тест3"
     text: |
       тест3
