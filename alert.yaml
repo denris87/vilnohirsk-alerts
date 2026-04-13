@@ -34,9 +34,9 @@ communal:
 
 news:
   - show: true
-    title: "📢 ТЕСТ"
+    title: "📢 ТЕСТ1"
     text: |
-      ТЕСТ
+      ТЕСТ1
     
   - show: true
     title: "📢 ЦЕК інформує:"
