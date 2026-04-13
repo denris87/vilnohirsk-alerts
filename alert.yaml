@@ -34,19 +34,9 @@ communal:
 
 news:
   - show: true
-    title: "📢 ТЕСТ3"
+    title: "📢 ТЕСТ1.1"
     text: |
-      ТЕСТ3
-      
-  - show: true
-    title: "📢 ТЕСТ2"
-    text: |
-      ТЕСТ2
-      
-  - show: true
-    title: "📢 ТЕСТ1"
-    text: |
-      ТЕСТ1
+      ТЕСТ1.1
     
   - show: true
     title: "📢 ЦЕК інформує:"
