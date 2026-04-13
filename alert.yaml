@@ -36,7 +36,7 @@ news:
   - show: true
     title: "📢 ТЕСТ"
     text: |
-    ТЕСТ
+      ТЕСТ
     
   - show: true
     title: "📢 ЦЕК інформує:"
