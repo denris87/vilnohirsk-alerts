@@ -24,26 +24,33 @@ jobs:
         id: extract
         run: |
           # Беремо першу запис з category 'communal' де show=true
-          TITLE=$(yq eval '.communal[] | select(.show == true) | .title' alert.yaml | head -n 1)
-          TEXT=$(yq eval '.communal[] | select(.show == true) | .text' alert.yaml | head -n 20)
+          TITLE=$(yq eval '[.communal[] | select(.show == true)][0].title' alert.yaml)
+          TEXT=$(yq eval '[.communal[] | select(.show == true)][0].text' alert.yaml)
           
-          # Якщо нічого не знайдено — використовуємо текст з коміту
-          if [ -z "$TITLE" ]; then
+          # Якщо нічого не знайдено
+          if [ -z "$TITLE" ] || [ "$TITLE" = "null" ]; then
             TITLE="⚡ Комунальні новини"
             TEXT="Подивись свіжі оголошення на сайті"
           fi
           
-          # Очищуємо текст від markdown ** і обрізаємо до 150 символів
+          # Очищуємо текст від markdown ** і обрізаємо
           CLEAN_TEXT=$(echo "$TEXT" | sed 's/\*\*//g' | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-150)
           if [ ${#CLEAN_TEXT} -ge 150 ]; then
             CLEAN_TEXT="${CLEAN_TEXT}…"
           fi
           
-          # Очищуємо заголовок від двокрапки в кінці і обрізаємо до 50 символів
+          # Очищуємо заголовок
           CLEAN_TITLE=$(echo "$TITLE" | sed 's/:$//' | cut -c1-50)
           
-          echo "title=$CLEAN_TITLE" >> $GITHUB_OUTPUT
-          echo "body=$CLEAN_TEXT" >> $GITHUB_OUTPUT
+          # Зберігаємо у GITHUB_OUTPUT через heredoc щоб уникнути проблем з лапками
+          {
+            echo "title<<EOF_TITLE"
+            echo "$CLEAN_TITLE"
+            echo "EOF_TITLE"
+            echo "body<<EOF_BODY"
+            echo "$CLEAN_TEXT"
+            echo "EOF_BODY"
+          } >> $GITHUB_OUTPUT
           
           echo "📋 Заголовок: $CLEAN_TITLE"
           echo "📋 Текст: $CLEAN_TEXT"
@@ -57,23 +64,38 @@ jobs:
         run: |
           echo "🚀 Sending push to Apps Script..."
           
-          RESPONSE=$(curl -L -s -X POST "$APPS_SCRIPT_URL" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"formType\": \"github_push\",
-              \"secret\": \"$PUSH_SECRET\",
-              \"category\": \"communal\",
-              \"title\": \"$PUSH_TITLE\",
-              \"body\": \"$PUSH_BODY\",
-              \"url\": \"https://vilnohirsk.online\"
-            }")
+          # Формуємо JSON через jq щоб безпечно екранувати спецсимволи
+          PAYLOAD=$(jq -n \
+            --arg secret "$PUSH_SECRET" \
+            --arg category "communal" \
+            --arg title "$PUSH_TITLE" \
+            --arg body "$PUSH_BODY" \
+            --arg url "https://vilnohirsk.online" \
+            '{formType: "github_push", secret: $secret, category: $category, title: $title, body: $body, url: $url}')
           
-          echo "📨 Response: $RESPONSE"
+          echo "📦 Payload (without secret):"
+          echo "$PAYLOAD" | jq 'del(.secret)'
+          
+          # Apps Script часто редіректить — використовуємо --location-trusted
+          # text/plain важливо щоб Apps Script правильно прочитав body
+          RESPONSE=$(curl -L --location-trusted -s -X POST "$APPS_SCRIPT_URL" \
+            -H "Content-Type: text/plain;charset=utf-8" \
+            -d "$PAYLOAD" \
+            -w "\nHTTP_CODE:%{http_code}")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
+          BODY=$(echo "$RESPONSE" | sed '/HTTP_CODE:/d')
+          
+          echo "📨 HTTP Code: $HTTP_CODE"
+          echo "📨 Response body: $BODY"
           
           # Перевіряємо що відповідь успішна
-          if echo "$RESPONSE" | grep -q '"status":"success"'; then
+          if echo "$BODY" | grep -q '"status":"success"'; then
+            echo "✅ Push sent successfully!"
+          elif echo "$BODY" | grep -q '"sent":true'; then
             echo "✅ Push sent successfully!"
           else
-            echo "⚠️ Push may have failed. Check Apps Script logs."
+            echo "❌ Push failed. Check Apps Script logs."
+            echo "Body was: $BODY"
             exit 1
           fi
