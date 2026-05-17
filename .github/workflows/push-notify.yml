@@ -1,0 +1,79 @@
+name: Send push notification on alert.yaml change
+
+on:
+  push:
+    branches: [main]
+    paths: ['alert.yaml']
+
+jobs:
+  send-push:
+    runs-on: ubuntu-latest
+    # Запускаем тільки якщо в commit message є тег [push]
+    if: contains(github.event.head_commit.message, '[push]')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install yq (YAML parser)
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+      
+      - name: Extract first visible communal entry
+        id: extract
+        run: |
+          # Беремо першу запис з category 'communal' де show=true
+          TITLE=$(yq eval '.communal[] | select(.show == true) | .title' alert.yaml | head -n 1)
+          TEXT=$(yq eval '.communal[] | select(.show == true) | .text' alert.yaml | head -n 20)
+          
+          # Якщо нічого не знайдено — використовуємо текст з коміту
+          if [ -z "$TITLE" ]; then
+            TITLE="⚡ Комунальні новини"
+            TEXT="Подивись свіжі оголошення на сайті"
+          fi
+          
+          # Очищуємо текст від markdown ** і обрізаємо до 150 символів
+          CLEAN_TEXT=$(echo "$TEXT" | sed 's/\*\*//g' | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-150)
+          if [ ${#CLEAN_TEXT} -ge 150 ]; then
+            CLEAN_TEXT="${CLEAN_TEXT}…"
+          fi
+          
+          # Очищуємо заголовок від двокрапки в кінці і обрізаємо до 50 символів
+          CLEAN_TITLE=$(echo "$TITLE" | sed 's/:$//' | cut -c1-50)
+          
+          echo "title=$CLEAN_TITLE" >> $GITHUB_OUTPUT
+          echo "body=$CLEAN_TEXT" >> $GITHUB_OUTPUT
+          
+          echo "📋 Заголовок: $CLEAN_TITLE"
+          echo "📋 Текст: $CLEAN_TEXT"
+      
+      - name: Send push to Apps Script
+        env:
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          PUSH_TITLE: ${{ steps.extract.outputs.title }}
+          PUSH_BODY: ${{ steps.extract.outputs.body }}
+        run: |
+          echo "🚀 Sending push to Apps Script..."
+          
+          RESPONSE=$(curl -L -s -X POST "$APPS_SCRIPT_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"formType\": \"github_push\",
+              \"secret\": \"$PUSH_SECRET\",
+              \"category\": \"communal\",
+              \"title\": \"$PUSH_TITLE\",
+              \"body\": \"$PUSH_BODY\",
+              \"url\": \"https://vilnohirsk.online\"
+            }")
+          
+          echo "📨 Response: $RESPONSE"
+          
+          # Перевіряємо що відповідь успішна
+          if echo "$RESPONSE" | grep -q '"status":"success"'; then
+            echo "✅ Push sent successfully!"
+          else
+            echo "⚠️ Push may have failed. Check Apps Script logs."
+            exit 1
+          fi
