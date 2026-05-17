@@ -42,7 +42,7 @@ jobs:
           # Очищуємо заголовок
           CLEAN_TITLE=$(echo "$TITLE" | sed 's/:$//' | cut -c1-50)
           
-          # Зберігаємо у GITHUB_OUTPUT через heredoc щоб уникнути проблем з лапками
+          # Зберігаємо у GITHUB_OUTPUT через heredoc
           {
             echo "title<<EOF_TITLE"
             echo "$CLEAN_TITLE"
@@ -76,9 +76,9 @@ jobs:
           echo "📦 Payload (without secret):"
           echo "$PAYLOAD" | jq 'del(.secret)'
           
-          # Apps Script часто редіректить — використовуємо --location-trusted
-          # text/plain важливо щоб Apps Script правильно прочитав body
-          RESPONSE=$(curl -L --location-trusted -s -X POST "$APPS_SCRIPT_URL" \
+          # КРИТИЧНО: --post301 --post302 щоб curl зберіг POST метод після редіректу Apps Script
+          # text/plain важливий бо так само працює сайт
+          RESPONSE=$(curl -L --post301 --post302 -s -X POST "$APPS_SCRIPT_URL" \
             -H "Content-Type: text/plain;charset=utf-8" \
             -d "$PAYLOAD" \
             -w "\nHTTP_CODE:%{http_code}")
