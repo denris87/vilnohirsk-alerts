@@ -8,94 +8,107 @@ on:
 jobs:
   send-push:
     runs-on: ubuntu-latest
-    # Запускаем тільки якщо в commit message є тег [push]
     if: contains(github.event.head_commit.message, '[push]')
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      - name: Install yq (YAML parser)
-        run: |
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       
-      - name: Extract first visible communal entry
-        id: extract
-        run: |
-          # Беремо першу запис з category 'communal' де show=true
-          TITLE=$(yq eval '[.communal[] | select(.show == true)][0].title' alert.yaml)
-          TEXT=$(yq eval '[.communal[] | select(.show == true)][0].text' alert.yaml)
-          
-          # Якщо нічого не знайдено
-          if [ -z "$TITLE" ] || [ "$TITLE" = "null" ]; then
-            TITLE="⚡ Комунальні новини"
-            TEXT="Подивись свіжі оголошення на сайті"
-          fi
-          
-          # Очищуємо текст від markdown ** і обрізаємо
-          CLEAN_TEXT=$(echo "$TEXT" | sed 's/\*\*//g' | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-150)
-          if [ ${#CLEAN_TEXT} -ge 150 ]; then
-            CLEAN_TEXT="${CLEAN_TEXT}…"
-          fi
-          
-          # Очищуємо заголовок
-          CLEAN_TITLE=$(echo "$TITLE" | sed 's/:$//' | cut -c1-50)
-          
-          # Зберігаємо у GITHUB_OUTPUT через heredoc
-          {
-            echo "title<<EOF_TITLE"
-            echo "$CLEAN_TITLE"
-            echo "EOF_TITLE"
-            echo "body<<EOF_BODY"
-            echo "$CLEAN_TEXT"
-            echo "EOF_BODY"
-          } >> $GITHUB_OUTPUT
-          
-          echo "📋 Заголовок: $CLEAN_TITLE"
-          echo "📋 Текст: $CLEAN_TEXT"
+      - name: Install dependencies
+        run: pip install requests pyyaml
       
-      - name: Send push to Apps Script
+      - name: Send push notification
         env:
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
-          PUSH_TITLE: ${{ steps.extract.outputs.title }}
-          PUSH_BODY: ${{ steps.extract.outputs.body }}
         run: |
-          echo "🚀 Sending push to Apps Script..."
+          cat > send_push.py << 'PYEOF'
+          import yaml
+          import requests
+          import os
+          import sys
+          import re
           
-          # Формуємо JSON через jq щоб безпечно екранувати спецсимволи
-          PAYLOAD=$(jq -n \
-            --arg secret "$PUSH_SECRET" \
-            --arg category "communal" \
-            --arg title "$PUSH_TITLE" \
-            --arg body "$PUSH_BODY" \
-            --arg url "https://vilnohirsk.online" \
-            '{formType: "github_push", secret: $secret, category: $category, title: $title, body: $body, url: $url}')
+          # Завантажуємо alert.yaml
+          with open('alert.yaml', 'r', encoding='utf-8') as f:
+              data = yaml.safe_load(f)
           
-          echo "📦 Payload (without secret):"
-          echo "$PAYLOAD" | jq 'del(.secret)'
+          # Шукаємо першу запис в communal з show=true
+          title = "⚡ Комунальні новини"
+          body = "Подивись свіжі оголошення на сайті"
           
-          # КРИТИЧНО: --post301 --post302 щоб curl зберіг POST метод після редіректу Apps Script
-          # text/plain важливий бо так само працює сайт
-          RESPONSE=$(curl -L --post301 --post302 -s -X POST "$APPS_SCRIPT_URL" \
-            -H "Content-Type: text/plain;charset=utf-8" \
-            -d "$PAYLOAD" \
-            -w "\nHTTP_CODE:%{http_code}")
+          if data and 'communal' in data:
+              for entry in data['communal']:
+                  if entry.get('show') == True:
+                      title = entry.get('title', title)
+                      body = entry.get('text', body)
+                      break
           
-          HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
-          BODY=$(echo "$RESPONSE" | sed '/HTTP_CODE:/d')
+          # Очищуємо текст
+          # Видаляємо markdown ** жирний текст
+          body = re.sub(r'\*\*', '', body)
+          # Замінюємо переноси рядків пробілами
+          body = re.sub(r'\s+', ' ', body).strip()
+          # Обрізаємо до 150 символів
+          if len(body) > 150:
+              body = body[:149] + '…'
           
-          echo "📨 HTTP Code: $HTTP_CODE"
-          echo "📨 Response body: $BODY"
+          # Очищуємо заголовок: видаляємо двокрапку в кінці
+          title = title.rstrip(':').strip()
+          if len(title) > 50:
+              title = title[:50]
           
-          # Перевіряємо що відповідь успішна
-          if echo "$BODY" | grep -q '"status":"success"'; then
-            echo "✅ Push sent successfully!"
-          elif echo "$BODY" | grep -q '"sent":true'; then
-            echo "✅ Push sent successfully!"
-          else
-            echo "❌ Push failed. Check Apps Script logs."
-            echo "Body was: $BODY"
-            exit 1
-          fi
+          print(f"📋 Заголовок: {title}")
+          print(f"📋 Текст: {body}")
+          
+          # Готуємо payload
+          payload = {
+              "formType": "github_push",
+              "secret": os.environ['PUSH_SECRET'],
+              "category": "communal",
+              "title": title,
+              "body": body,
+              "url": "https://vilnohirsk.online"
+          }
+          
+          # Шлемо POST з allow_redirects=True (Python зберігає метод за RFC коректно)
+          print("🚀 Sending push to Apps Script...")
+          
+          # ВАЖЛИВО: використовуємо session щоб правильно обробити редіректи
+          session = requests.Session()
+          response = session.post(
+              os.environ['APPS_SCRIPT_URL'],
+              json=payload,
+              headers={'Content-Type': 'application/json'},
+              allow_redirects=True,
+              timeout=30
+          )
+          
+          print(f"📨 HTTP Code: {response.status_code}")
+          print(f"📨 Response body: {response.text[:500]}")
+          
+          # Перевіряємо результат
+          if response.status_code == 200:
+              try:
+                  result = response.json()
+                  if result.get('status') == 'success' or result.get('sent') == True:
+                      print("✅ Push sent successfully!")
+                      sys.exit(0)
+                  else:
+                      print(f"⚠️ Unexpected response: {result}")
+                      sys.exit(1)
+              except ValueError:
+                  # Не JSON — можливо HTML помилка
+                  print("❌ Response is not JSON")
+                  sys.exit(1)
+          else:
+              print(f"❌ HTTP {response.status_code} - request failed")
+              sys.exit(1)
+          PYEOF
+          
+          python send_push.py
